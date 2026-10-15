@@ -1,0 +1,48 @@
+# Curated starter feeds shown in Discover and the first-time tutorial.
+# "popular: true" marks feeds preselected in the tutorial.
+# Every URL here is checked live by tests/check_starter_feeds.py.
+
+categories:
+  - name: Australia
+    feeds:
+      - name: ABC News Top Stories
+        url: https://www.abc.net.au/news/feed/51120/rss.xml
+        popular: true
+      - name: BoM Victoria warnings
+        url: http://www.bom.gov.au/fwo/IDZ00059.warnings_vic.xml
+      - name: r/melbourne
+        url: https://www.reddit.com/r/melbourne/.rss
+
+  - name: Deals
+    feeds:
+      - name: OzBargain
+        url: https://www.ozbargain.com.au/deals/feed
+        popular: true
+
+  - name: Tech
+    feeds:
+      - name: Hacker News front page
+        url: https://hnrss.org/frontpage
+        popular: true
+      - name: Product Hunt
+        url: https://www.producthunt.com/feed
+      - name: Simon Willison on AI
+        url: https://simonwillison.net/atom/everything/
+
+  - name: Science
+    feeds:
+      - name: arXiv AI papers
+        url: https://rss.arxiv.org/rss/cs.AI
+      - name: USGS M4.5+ earthquakes
+        url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.atom
+
+templates:
+  - name: GitHub releases
+    url: https://github.com/OWNER/REPO/releases.atom
+    help: Replace OWNER and REPO with the project, for example python/cpython.
+  - name: YouTube channel
+    url: https://www.youtube.com/feeds/videos.xml?channel_id=ID
+    help: Replace ID with the channel ID (starts with UC) from the channel page.
+  - name: Any subreddit
+    url: https://www.reddit.com/r/NAME/.rss
+    help: Replace NAME with the subreddit name.

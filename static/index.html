@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gleaner</title>
+  <meta name="description" content="Collect updates from sites you care about into one list.">
+  <meta name="theme-color" content="#1f6f50" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Gleaner">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand"><img src="/static/icons/icon.svg" alt="" width="28" height="28"> Gleaner</h1>
+    <div class="topbar-actions">
+      <button type="button" id="refresh-btn" class="icon-btn" aria-label="Refresh feeds" title="Refresh">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+      </button>
+      <button type="button" id="help-btn" class="icon-btn" aria-label="Open tutorial" title="Help">?</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Feed list -->
+    <section id="view-feed" class="view" data-view="feed" aria-labelledby="tab-feed">
+      <div id="ptr" class="ptr" aria-hidden="true"><span class="ptr-spinner"></span><span class="ptr-text">Pull to refresh</span></div>
+      <div class="toolbar">
+        <label class="switch">
+          <input type="checkbox" id="unread-only">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>Show unread only</span>
+        </label>
+        <button type="button" id="mark-all-read" class="text-btn">Mark all read</button>
+      </div>
+      <p id="feed-status" class="status" role="status" aria-live="polite"></p>
+      <ol id="item-list" class="item-list"></ol>
+      <div id="feed-empty" class="empty" hidden>
+        <p class="empty-title">No feeds yet</p>
+        <p>Pick a few from Discover or add your own in My Feeds.</p>
+        <button type="button" class="primary-btn" data-goto="discover">Browse Discover</button>
+      </div>
+    </section>
+
+    <!-- My Feeds -->
+    <section id="view-feeds" class="view" data-view="feeds" aria-labelledby="tab-feeds" hidden>
+      <form id="add-feed-form" class="card add-form" novalidate>
+        <label for="add-feed-url" class="label">Add a feed by URL</label>
+        <div class="row">
+          <input id="add-feed-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false"
+                 placeholder="https://example.com/feed.xml" required>
+          <button type="submit" class="primary-btn" id="add-feed-submit">Add</button>
+        </div>
+        <p id="add-feed-msg" class="form-msg" role="status" aria-live="polite"></p>
+      </form>
+      <ul id="my-feeds" class="feed-cards"></ul>
+      <p id="my-feeds-empty" class="empty" hidden>You have not added any feeds yet.</p>
+    </section>
+
+    <!-- Discover -->
+    <section id="view-discover" class="view" data-view="discover" aria-labelledby="tab-discover" hidden>
+      <div id="discover-list"></div>
+      <h2 class="section-title">Make your own</h2>
+      <p class="hint">Many sites publish feeds. These patterns work for popular ones:</p>
+      <ul id="template-list" class="template-list"></ul>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tab-feed" data-tab="feed" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>Feed</span>
+    </button>
+    <button type="button" role="tab" id="tab-feeds" data-tab="feeds" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/></svg><span>My Feeds</span>
+    </button>
+    <button type="button" role="tab" id="tab-discover" data-tab="discover" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg><span>Discover</span>
+    </button>
+  </nav>
+
+  <!-- First-time tutorial -->
+  <div id="tutorial" class="overlay" hidden>
+    <div class="tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+      <div class="tutorial-head">
+        <span id="tutorial-progress" class="tutorial-progress"></span>
+        <button type="button" id="tutorial-skip" class="text-btn">Skip</button>
+      </div>
+      <h2 id="tutorial-title" tabindex="-1"></h2>
+      <div id="tutorial-body"></div>
+      <div class="tutorial-actions">
+        <button type="button" id="tutorial-back" class="secondary-btn">Back</button>
+        <button type="button" id="tutorial-next" class="primary-btn">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
