@@ -135,13 +135,16 @@ It:
 3. **Trusts only this repo.** It adds a federated credential with the subject `repo:s3991213/gleaner:environment:production`. Azure only accepts tokens from workflow runs in that repo, in that GitHub environment.
 4. **Saves the IDs to GitHub.** The client, tenant and subscription IDs, the resource group and the app name become repository variables. They're identifiers, not secrets, which is why they're variables rather than secrets.
 
-One gotcha: a brand-new service principal can take a few seconds to appear for role assignments, so the script retries that step.
+Two gotchas:
+
+- **Propagation delay.** A brand-new service principal can take a few seconds to appear for role assignments, so the script retries that step.
+- **The trust rule didn't match.** The first automatic deploy failed with `AADSTS700213: No matching federated identity record found`. GitHub sent the subject as `repo:s3991213@176739961/gleaner@1420144093:environment:production`, which uses the owner and repo **numeric IDs**, not just their names. That form is the default for newer repos, and it means renaming or recreating a repo can't hijack the trust. The script now adds a rule for both forms. After that, re-running just the failed job worked.
 
 **[CAST: casts/04-github-oidc.cast]**
 
 From now on, every push to `main` runs test, build and deploy. The deploy job logs in with `azure/login`, points the app at the image tagged with the commit, and polls `/healthz` until the app answers, allowing for a cold start.
 
-**TODO:** first automatic deploy run. **[SCREENSHOT: full green pipeline]**
+The first automatic deploy rolled out `sha-647ace4` and passed its health check. **[SCREENSHOT: full green pipeline]**
 
 ## Step 5: On the phone
 

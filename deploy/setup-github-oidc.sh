@@ -52,14 +52,24 @@ for attempt in 1 2 3 4 5 6; do
 done
 
 echo "Trusting GitHub Actions runs from ${GITHUB_REPO} (environment: production)"
-if ! az ad app federated-credential list --id "${CLIENT_ID}" --query "[?name=='github-production']" --output tsv | grep -q .; then
-  az ad app federated-credential create --id "${CLIENT_ID}" --parameters "{
-    \"name\": \"github-production\",
-    \"issuer\": \"https://token.actions.githubusercontent.com\",
-    \"subject\": \"repo:${GITHUB_REPO}:environment:production\",
-    \"audiences\": [\"api://AzureADTokenExchange\"]
-  }" --output none
-fi
+# GitHub may send the subject with names only (older repos) or with immutable
+# owner and repo IDs (repo:OWNER@ID/REPO@ID:...). Trust both forms of this repo.
+OWNER_ID="$(gh api "repos/${GITHUB_REPO}" --jq .owner.id)"
+REPO_ID="$(gh api "repos/${GITHUB_REPO}" --jq .id)"
+add_credential() {
+  local name="$1" subject="$2"
+  if ! az ad app federated-credential list --id "${CLIENT_ID}" --query "[?name=='${name}']" --output tsv | grep -q .; then
+    az ad app federated-credential create --id "${CLIENT_ID}" --parameters "{
+      \"name\": \"${name}\",
+      \"issuer\": \"https://token.actions.githubusercontent.com\",
+      \"subject\": \"${subject}\",
+      \"audiences\": [\"api://AzureADTokenExchange\"]
+    }" --output none
+  fi
+}
+add_credential github-production "repo:${GITHUB_REPO}:environment:production"
+add_credential github-production-ids \
+  "repo:${GITHUB_REPO%%/*}@${OWNER_ID}/${GITHUB_REPO##*/}@${REPO_ID}:environment:production"
 
 echo "Saving IDs as GitHub repository variables"
 gh variable set AZURE_CLIENT_ID --repo "${GITHUB_REPO}" --body "${CLIENT_ID}"
