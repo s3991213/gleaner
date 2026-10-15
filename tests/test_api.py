@@ -21,6 +21,11 @@ def test_healthz(client):
     assert client.get("/healthz").status_code == 200
 
 
+def test_head_requests_for_uptime_monitors(client):
+    assert client.head("/healthz").status_code == 200
+    assert client.head("/").status_code == 200
+
+
 def test_starter_feeds(client):
     data = client.get("/api/starter-feeds").json()
     names = [c["name"] for c in data["categories"]]

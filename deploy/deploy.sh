@@ -2,7 +2,7 @@
 # Deploy Gleaner to Azure Container Apps on the consumption (free tier friendly) plan.
 #
 # Prerequisites:
-#   - az CLI logged in (az login) with the containerapp extension (az extension add -n containerapp)
+#   - az CLI logged in (az login). Container Apps commands are built into recent az versions
 #   - The image already pushed to ghcr.io and set to public visibility, for example:
 #       docker build --platform linux/amd64 -t ghcr.io/OWNER/gleaner:latest .
 #       docker push ghcr.io/OWNER/gleaner:latest

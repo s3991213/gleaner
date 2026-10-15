@@ -62,7 +62,7 @@ async def api_rate_limit(request: Request, call_next):
     return response
 
 
-@app.get("/healthz")
+@app.api_route("/healthz", methods=["GET", "HEAD"])
 async def healthz():
     return {"status": "ok"}
 
@@ -84,7 +84,7 @@ async def api_starter_feeds(request: Request):
 
 
 # PWA files are served from the root so the service worker controls the whole app.
-@app.get("/", include_in_schema=False)
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 async def index():
     return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 

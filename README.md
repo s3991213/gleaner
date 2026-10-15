@@ -82,11 +82,10 @@ The image is hosted on GitHub Container Registry (ghcr.io), so no Azure Containe
    docker push ghcr.io/OWNER/gleaner:latest
    ```
 
-2. Log in to Azure and add the Container Apps extension:
+2. Log in to Azure (Container Apps commands are built into recent versions of the az CLI):
 
    ```bash
    az login
-   az extension add --name containerapp --upgrade
    ```
 
 3. Run the deploy script:

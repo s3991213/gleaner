@@ -50,7 +50,15 @@ The "30 days free" part of an Azure free account is the $200 trial credit. Conta
 
 To keep costs at zero I avoided Azure Container Registry, Key Vault, storage and databases, and created the Container Apps environment with `--logs-destination none` so there is no Log Analytics workspace to pay for. I also set a budget alert as a safety net.
 
-**TODO:** budget alert screenshot. **[SCREENSHOT: Azure budget alert]**
+I created the budget with `az rest`, because `az consumption budget create` can't set up email alerts. It's on the whole subscription, $5 a month, and emails me at 20% actual spend, 100% actual and 100% forecast:
+
+```bash
+az rest --method put \
+  --url "https://management.azure.com/subscriptions/$SUB/providers/Microsoft.Consumption/budgets/gleaner-5-dollar-budget?api-version=2023-05-01" \
+  --body @budget.json
+```
+
+**[SCREENSHOT: Azure budget alert in Cost Management]**
 
 ## Step 1: Put the code on GitHub
 
@@ -72,17 +80,68 @@ The deploy job is skipped until Azure is set up, so the first push only tests an
 
 ## Step 3: The first deploy, by hand
 
-**TODO:** `az login`, `deploy/deploy.sh`, output and the live URL.
+Log in, then run the deploy script with the image the pipeline built. I use the commit tag (`sha-4dc3f78`) rather than `latest`, so I know exactly which build is live:
 
-**[CAST: running deploy.sh] [VIDEO: Azure portal walkthrough of the created resources]**
+```bash
+az login
+IMAGE=ghcr.io/s3991213/gleaner:sha-4dc3f78 ./deploy/deploy.sh
+```
+
+The script does four things:
+
+1. **Registers the providers.** It enables Container Apps (`Microsoft.App`) on the subscription. On a brand new subscription this was the slowest part, about 2.5 minutes.
+2. **Creates the resource group.** `gleaner-rg` in Australia East, the closest region to Melbourne.
+3. **Creates the Container Apps environment.** `gleaner-env`, with `--logs-destination none`, which took a few minutes.
+4. **Creates the container app.** Public https ingress to port 8000, 0.25 vCPU, 0.5 GiB, min replicas 0, max replicas 2.
+
+At the end it prints the address:
+
+```
+Deployed: https://gleaner.livelywater-a1a76a35.australiaeast.azurecontainerapps.io
+```
+
+**[CAST: casts/03-first-deploy.cast]** **[VIDEO: Azure portal walkthrough of the created resources]**
+
+### Checking it
+
+```bash
+U=https://gleaner.livelywater-a1a76a35.australiaeast.azurecontainerapps.io
+curl $U/healthz                                                  # {"status":"ok"}
+curl "$U/api/feed?url=https://hnrss.org/frontpage"               # 20 items
+curl "$U/api/feed?url=http://169.254.169.254/metadata/instance"  # 400: Destination address is not allowed
+```
+
+The last check is the important one. `169.254.169.254` is the cloud metadata address, and the proxy refuses it on the real Azure network too. I also ran the Playwright browser check against the live URL: tutorial, skip, reload and adding a feed all passed.
+
+### Two snags on the way
+
+- **The image was private.** GitHub makes new container images private, and Azure can't pull a private image without credentials. The fix is a one-time switch in the package settings (Change visibility, Public).
+- **`az extension add containerapp` failed on my Mac.** Homebrew's Python 3.14 was built against a newer XML library than macOS 26.2 ships, which broke the CLI's extension installer. The extension isn't needed anyway: `az containerapp` is built into recent versions of the Azure CLI.
 
 ## Step 4: Let GitHub deploy without storing a password
 
 Instead of saving an Azure password in GitHub, the workflow uses OpenID Connect. Azure is told to trust tokens from this one repository's `production` environment, and the GitHub identity can only change the Gleaner resource group.
 
-**TODO:** `deploy/setup-github-oidc.sh` output, then a push that deploys on its own.
+One script sets it up, using the `az` and `gh` logins I already had:
 
-**[CAST: running setup-github-oidc.sh] [SCREENSHOT: full green pipeline]**
+```bash
+GITHUB_REPO=s3991213/gleaner ./deploy/setup-github-oidc.sh
+```
+
+It:
+
+1. **Creates the identity.** An Entra ID app registration called `gleaner-github-deploy`, with a service principal.
+2. **Limits its permissions.** It gets **Contributor on `gleaner-rg` only**. Even if something went wrong in the pipeline, it couldn't touch anything else in the subscription.
+3. **Trusts only this repo.** It adds a federated credential with the subject `repo:s3991213/gleaner:environment:production`. Azure only accepts tokens from workflow runs in that repo, in that GitHub environment.
+4. **Saves the IDs to GitHub.** The client, tenant and subscription IDs, the resource group and the app name become repository variables. They're identifiers, not secrets, which is why they're variables rather than secrets.
+
+One gotcha: a brand-new service principal can take a few seconds to appear for role assignments, so the script retries that step.
+
+**[CAST: casts/04-github-oidc.cast]**
+
+From now on, every push to `main` runs test, build and deploy. The deploy job logs in with `azure/login`, points the app at the image tagged with the commit, and polls `/healthz` until the app answers, allowing for a cold start.
+
+**TODO:** first automatic deploy run. **[SCREENSHOT: full green pipeline]**
 
 ## Step 5: On the phone
 

@@ -32,11 +32,24 @@ if ! az ad sp show --id "${CLIENT_ID}" --output none 2>/dev/null; then
 fi
 
 echo "Granting Contributor on resource group ${RESOURCE_GROUP} only"
-az role assignment create \
-  --assignee "${CLIENT_ID}" \
-  --role Contributor \
-  --scope "${RG_ID}" \
-  --output none
+SP_OBJECT_ID="$(az ad sp show --id "${CLIENT_ID}" --query id --output tsv)"
+# A new service principal can take a little while to become visible to role assignments.
+for attempt in 1 2 3 4 5 6; do
+  if az role assignment create \
+    --assignee-object-id "${SP_OBJECT_ID}" \
+    --assignee-principal-type ServicePrincipal \
+    --role Contributor \
+    --scope "${RG_ID}" \
+    --output none; then
+    break
+  fi
+  if [[ "${attempt}" == 6 ]]; then
+    echo "Role assignment failed" >&2
+    exit 1
+  fi
+  echo "Waiting for the new identity to propagate (attempt ${attempt})"
+  sleep 10
+done
 
 echo "Trusting GitHub Actions runs from ${GITHUB_REPO} (environment: production)"
 if ! az ad app federated-credential list --id "${CLIENT_ID}" --query "[?name=='github-production']" --output tsv | grep -q .; then
