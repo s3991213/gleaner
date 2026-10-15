@@ -72,29 +72,51 @@ curl http://localhost:8000/healthz
 
 ## Deploy to Azure Container Apps
 
-The image is hosted on GitHub Container Registry (ghcr.io), so no Azure Container Registry is needed. No Key Vault, storage or database is used, and no secrets are required.
+Live: production https://gleaner.livelywater-a1a76a35.australiaeast.azurecontainerapps.io and staging https://gleaner-staging.livelywater-a1a76a35.australiaeast.azurecontainerapps.io
 
-1. Build and push the image, then make the package public in GitHub (Packages, Package settings, Change visibility) so Azure can pull it without credentials:
+Images are hosted on GitHub Container Registry (ghcr.io), so no Azure Container Registry is needed. GitHub Actions logs in to Azure with OpenID Connect, so no password is stored anywhere.
+
+### How changes ship
+
+Push to `main`, and `.github/workflows/ci-cd.yml` takes it from there:
+
+1. **Test gate:** ruff, pytest and a gitleaks secret scan. Pull requests stop here.
+2. **Build:** one linux/amd64 image, tagged `sha-<commit>`, that reports its version on `/healthz`.
+3. **Staging:** deploys automatically and is verified.
+4. **Production:** the same image, after you approve it in GitHub. It's verified, and rolled back automatically if unhealthy.
+5. **Release notes:** a `prod-sha-<commit>` GitHub release listing the changes and the previous version.
+
+To roll back, run the **Rollback** workflow with an earlier version. See [docs/RUNBOOK.md](docs/RUNBOOK.md) for operations, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the diagram.
+
+### One-time setup from scratch
+
+Needs `az login` and `gh auth login --scopes workflow`.
+
+1. Push the repo to GitHub and let the first workflow run publish the image. Then make the package public (package settings, Change visibility) so Azure can pull it without credentials.
+2. Create the environment, the production app and the staging app:
 
    ```bash
-   echo "$GITHUB_TOKEN" | docker login ghcr.io -u OWNER --password-stdin
-   docker build --platform linux/amd64 -t ghcr.io/OWNER/gleaner:latest .
-   docker push ghcr.io/OWNER/gleaner:latest
+   IMAGE=ghcr.io/OWNER/gleaner:sha-xxxxxxx ./deploy/deploy.sh
+   APP_NAME=gleaner-staging IMAGE=ghcr.io/OWNER/gleaner:sha-xxxxxxx ./deploy/deploy.sh
    ```
 
-2. Log in to Azure (Container Apps commands are built into recent versions of the az CLI):
+3. Give each app its own Key Vault secret, read with its managed identity:
 
    ```bash
-   az login
+   ./deploy/setup-keyvault.sh
    ```
 
-3. Run the deploy script:
+4. Send logs to Log Analytics with a 0.1 GB/day cap (optional; live tailing works without it):
 
    ```bash
-   IMAGE=ghcr.io/OWNER/gleaner:latest ./deploy/deploy.sh
+   ./deploy/setup-logging.sh
    ```
 
-   It creates a resource group, a Container Apps environment with `--logs-destination none` (no Log Analytics cost) and a container app with external ingress on port 8000, min replicas 0 and max replicas 2. Override `RESOURCE_GROUP`, `LOCATION`, `ENVIRONMENT` or `APP_NAME` with environment variables. Re-running it updates the app to the given image.
+5. Connect GitHub to Azure, create the staging and production environments, and require approval for production:
+
+   ```bash
+   GITHUB_REPO=OWNER/gleaner ./deploy/setup-github-oidc.sh
+   ```
 
 With scale to zero, the first request after a quiet period takes a few seconds while a replica starts.
 
@@ -121,11 +143,13 @@ All content belongs to its publishers. Gleaner shows titles, short plain-text su
 ## Project layout
 
 ```
-app/        main.py (routes), fetcher.py (safe fetching, cache), security.py (SSRF, rate limit), parser.py (RSS/Atom)
+app/        main.py (routes), fetcher.py (safe fetching, cache), security.py (SSRF, rate limit),
+            parser.py (RSS/Atom), observability.py (JSON logs without IPs or feed URLs)
 static/     index.html, app.js, styles.css, manifest.json, sw.js, icons/
 tests/      pytest suite with fixtures, plus check_starter_feeds.py and e2e_browser.py
-deploy/     deploy.sh for Azure Container Apps
-docs/       ROADMAP.md
+deploy/     deploy.sh plus one-time setup scripts (Key Vault, logging, GitHub OIDC and environments)
+docs/       ARCHITECTURE.md, RUNBOOK.md, ROADMAP.md, blog/ (draft post, build journal, terminal recordings)
+.github/    CI/CD, reusable deploy and rollback workflows
 ```
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for planned podcast transcript search.

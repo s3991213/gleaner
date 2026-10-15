@@ -1,0 +1,6 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1792044310,"idle_time_limit":2.0,"command":"bash -c 'echo \"$ ./deploy/setup-keyvault.sh\"; export PYTHONWARNINGS=ignore; ./deploy/setup-keyvault.sh'","env":{"SHELL":"/bin/zsh"}}
+[0.008, "o", "$ ./deploy/setup-keyvault.sh\r\n"]
+[1.155, "o", "Creating resource group gleaner-secrets-rg\r\n"]
+[5.342, "o", "Creating Key Vault gleaner-kv-0b9d4c (RBAC authorization)\r\n"]
+[4.008, "o", "\u001b[91m(MissingSubscriptionRegistration) The subscription is not registered to use namespace 'Microsoft.KeyVault'. See https://aka.ms/rps-not-found for how to register subscriptions.\r\nCode: MissingSubscriptionRegistration\r\nMessage: The subscription is not registered to use namespace 'Microsoft.KeyVault'. See https://aka.ms/rps-not-found for how to register subscriptions.\r\nException Details:\t(MissingSubscriptionRegistration) The subscription is not registered to use namespace 'Microsoft.KeyVault'. See https://aka.ms/rps-not-found for how to register subscriptions.\r\n\tCode: MissingSubscriptionRegistration\r\n\tMessage: The subscription is not registered to use namespace 'Microsoft.KeyVault'. See https://aka.ms/rps-not-found for how to register subscriptions.\r\n\tTarget: Microsoft.KeyVault\u001b[0m\r\n"]
+[0.089, "x", "1"]

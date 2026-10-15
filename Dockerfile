@@ -12,8 +12,11 @@ RUN python -m venv /opt/venv \
 
 # ---- Runtime stage ----
 FROM python:3.12-slim
+# Set by CI to the image tag (for example sha-1a2b3c4) and reported by /healthz.
+ARG APP_VERSION=dev
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    APP_VERSION=${APP_VERSION} \
     PATH="/opt/venv/bin:$PATH"
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin gleaner
 WORKDIR /app
@@ -25,4 +28,4 @@ USER 10001
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)"
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header", "--no-access-log"]

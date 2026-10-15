@@ -1,0 +1,36 @@
+# Roll an environment back (or forward) to any image version already built,
+# without rebuilding. Production rollbacks still need approval, like any deploy.
+# Versions are listed under Releases (production) and in each deploy's summary.
+
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to change
+        type: choice
+        options: [staging, production]
+        required: true
+      version:
+        description: Image version to run, for example sha-1a2b3c4
+        type: string
+        required: true
+      reason:
+        description: Why (recorded in the deployment log)
+        type: string
+        default: manual rollback
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+      version: ${{ inputs.version }}
+      reason: ${{ inputs.reason }}

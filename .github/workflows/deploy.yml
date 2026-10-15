@@ -1,0 +1,154 @@
+# Reusable deploy: roll one image version out to one environment, verify it,
+# and roll back automatically if it does not come up healthy.
+# Called by ci-cd.yml (staging, then production) and rollback.yml.
+
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: staging or production
+        type: string
+        required: true
+      version:
+        description: Image tag to deploy, for example sha-1a2b3c4
+        type: string
+        required: true
+      reason:
+        description: Why this deploy happened (shown in the deployment log)
+        type: string
+        default: push to main
+    outputs:
+      url:
+        value: ${{ jobs.deploy.outputs.url }}
+      previous_version:
+        value: ${{ jobs.deploy.outputs.previous_version }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.rollout.outputs.url }}
+    # Never run two deploys to the same environment at once.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    outputs:
+      url: ${{ steps.rollout.outputs.url }}
+      previous_version: ${{ steps.current.outputs.previous_version }}
+    env:
+      APP: ${{ vars.AZURE_CONTAINERAPP_NAME }}
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check version format and that the image exists
+        run: |
+          if [[ ! "${VERSION}" =~ ^sha-[0-9a-f]{7}$ ]]; then
+            echo "::error::Version must look like sha-1a2b3c4, got '${VERSION}'"
+            exit 1
+          fi
+          repo="${GITHUB_REPOSITORY,,}"
+          token="$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r .token)"
+          if ! curl -fsS -o /dev/null -H "Authorization: Bearer ${token}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${repo}/manifests/${VERSION}"; then
+            echo "::error::Image ghcr.io/${repo}:${VERSION} not found (or not public)"
+            exit 1
+          fi
+          echo "IMAGE=ghcr.io/${repo}:${VERSION}" >> "$GITHUB_ENV"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Record what is running now
+        id: current
+        run: |
+          previous_image="$(az containerapp show --name "$APP" --resource-group "$RG" \
+            --query 'properties.template.containers[0].image' --output tsv)"
+          echo "previous_image=${previous_image}" >> "$GITHUB_OUTPUT"
+          echo "previous_version=${previous_image##*:}" >> "$GITHUB_OUTPUT"
+          echo "Currently running: ${previous_image}"
+
+      - name: Roll out
+        id: rollout
+        run: |
+          # Revision names carry the version, so the Azure portal shows what each one is.
+          revision="${APP}--${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          az containerapp update --name "$APP" --resource-group "$RG" \
+            --image "$IMAGE" \
+            --revision-suffix "${revision#"${APP}--"}" \
+            --output none
+          fqdn="$(az containerapp show --name "$APP" --resource-group "$RG" \
+            --query properties.configuration.ingress.fqdn --output tsv)"
+          echo "url=https://${fqdn}" >> "$GITHUB_OUTPUT"
+          echo "revision=${revision}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the new version is serving
+        id: verify
+        env:
+          URL: ${{ steps.rollout.outputs.url }}
+          REVISION: ${{ steps.rollout.outputs.revision }}
+        run: |
+          # Healthy means: the new revision is the latest ready one, /healthz answers,
+          # and it reports this version. Images built before /healthz reported a
+          # version return none, which is accepted so old versions can be rolled back to.
+          # Scale to zero means a cold start, so allow a few minutes.
+          for i in $(seq 1 30); do
+            ready="$(az containerapp show --name "$APP" --resource-group "$RG" \
+              --query properties.latestReadyRevisionName --output tsv)"
+            served="$(curl -fsS "${URL}/healthz" | jq -r '.version // "none"' || echo unreachable)"
+            if [[ "${ready}" == "${REVISION}" && ( "${served}" == "${VERSION}" || "${served}" == none ) ]]; then
+              echo "Healthy: ${REVISION} is ready and ${URL} reports version ${served}"
+              exit 0
+            fi
+            echo "Waiting (latest ready revision: ${ready:-none}, /healthz version: ${served})"
+            sleep 10
+          done
+          echo "::error::${REVISION} did not become healthy within 5 minutes"
+          exit 1
+
+      - name: Automatic rollback
+        if: failure() && steps.rollout.outcome == 'success'
+        env:
+          PREVIOUS_IMAGE: ${{ steps.current.outputs.previous_image }}
+        run: |
+          echo "::warning::Rolling ${APP} back to ${PREVIOUS_IMAGE}"
+          az containerapp update --name "$APP" --resource-group "$RG" \
+            --image "$PREVIOUS_IMAGE" \
+            --revision-suffix "rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --output none
+
+      - name: Deployment log
+        if: always()
+        env:
+          URL: ${{ steps.rollout.outputs.url }}
+          PREVIOUS: ${{ steps.current.outputs.previous_version }}
+          RESULT: ${{ steps.verify.outcome == 'success' && 'deployed and healthy' || 'FAILED (rolled back if rollout had started)' }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          {
+            echo "### ${{ inputs.environment }}: ${RESULT}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Previous version | \`${PREVIOUS:-unknown}\` |"
+            echo "| Reason | ${REASON} |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo "| Triggered by | @${GITHUB_TRIGGERING_ACTOR} |"
+            echo "| Container app | ${APP} |"
+            echo "| URL | ${URL:-n/a} |"
+            echo "| Finished (UTC) | $(date -u '+%Y-%m-%d %H:%M:%S') |"
+            echo
+            echo "Roll back: Actions, Rollback, Run workflow, environment \`${{ inputs.environment }}\`, version \`${PREVIOUS:-sha-xxxxxxx}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
